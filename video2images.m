@@ -1,114 +1,183 @@
 import numpy as np 
 import cv2
 
-STAGE_FIRST_FRAME = 0
-STAGE_SECOND_FRAME = 1
-STAGE_DEFAULT_FRAME = 2
-kMinNumFeature = 1500
+from visual_odometry import PinholeCamera, VisualOdometry
 
-lk_params = dict(winSize  = (21, 21), 
-				#maxLevel = 3,
-             	criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
-
-def featureTracking(image_ref, image_cur, px_ref):
-	kp2, st, err = cv2.calcOpticalFlowPyrLK(image_ref, image_cur, px_ref, None, **lk_params)  #shape: [k,2] [k,1] [k,1]
-
-	st = st.reshape(st.shape[0])
-	kp1 = px_ref[st == 1]
-	kp2 = kp2[st == 1]
-
-	return kp1, kp2
-
-#-0.033458,0.105152 , 0.001256, -0.006647, 0.000000
-class PinholeCamera:
-	def __init__(self, width, height, fx, fy, cx, cy, k1=0.0, k2=0.0, p1=0.0, p2=0.0, k3=0.0):
-		self.width = width
-		self.height = height
-		self.fx = fx
-		self.fy = fy
-		self.cx = cx
-		self.cy = cy
-		self.distortion = (abs(k1) > 0.0000001)
-		self.d = [k1, k2, p1, p2, k3]
+# 1) KITTI Dataset
+# 2) College Library Indoors
+# 3) Indoor Hallway
 
 
-class VisualOdometry:
-	def __init__(self, cam, annotations):
-		self.frame_stage = 0
-		self.cam = cam
-		self.new_frame = None
-		self.last_frame = None
-		self.cur_R = None
-		self.cur_t = None
-		self.px_ref = None
-		self.px_cur = None
-		self.focal = cam.fx
-		self.pp = (cam.cx, cam.cy)
-		self.trueX, self.trueY, self.trueZ = 0, 0, 0
-		self.detector = cv2.FastFeatureDetector_create(threshold=25, nonmaxSuppression=True)
-		with open(annotations) as f:
-			self.annotations = f.readlines()
-
-	def getAbsoluteScale(self, frame_id):  #specialized for KITTI odometry dataset
-		ss = self.annotations[frame_id-1].strip().split()
-		x_prev = float(ss[3])
-		y_prev = float(ss[7])
-		z_prev = float(ss[11])
-		ss = self.annotations[frame_id].strip().split()
-		x = float(ss[3])
-		y = float(ss[7])
-		z = float(ss[11])
-		self.trueX, self.trueY, self.trueZ = x, y, z
-		return np.sqrt((x - x_prev)*(x - x_prev) + (y - y_prev)*(y - y_prev) + (z - z_prev)*(z - z_prev))
-
-	def processFirstFrame(self):
-		self.px_ref = self.detector.detect(self.new_frame)
-		self.px_ref = np.array([x.pt for x in self.px_ref], dtype=np.float32)
-		self.frame_stage = STAGE_SECOND_FRAME
-
-		frame_with_points = self.new_frame.copy()
-		for point in self.px_ref:
-			x, y = point
-			cv2.circle(frame_with_points, (int(x), int(y)), 3, (0, 255, 0), -1)
-		cv2.imshow("Primer frame con puntos", frame_with_points)
-		cv2.waitKey(0)
-		cv2.destroyAllWindows()
-
-	def processSecondFrame(self):
-		self.px_ref, self.px_cur = featureTracking(self.last_frame, self.new_frame, self.px_ref)
-		E, mask = cv2.findEssentialMat(self.px_cur, self.px_ref, focal=self.focal, pp=self.pp, method=cv2.RANSAC, prob=0.999, threshold=1.0)
-		_, self.cur_R, self.cur_t, mask = cv2.recoverPose(E, self.px_cur, self.px_ref, focal=self.focal, pp = self.pp)
-		self.frame_stage = STAGE_DEFAULT_FRAME 
-		self.px_ref = self.px_cur
-
-	def processFrame(self, frame_id):
-		self.px_ref, self.px_cur = featureTracking(self.last_frame, self.new_frame, self.px_ref)
-		E, mask = cv2.findEssentialMat(self.px_cur, self.px_ref, focal=self.focal, pp=self.pp, method=cv2.RANSAC, prob=0.999, threshold=1.0)
-		_, R, t, mask = cv2.recoverPose(E, self.px_cur, self.px_ref, focal=self.focal, pp = self.pp)
-		absolute_scale = self.getAbsoluteScale(frame_id)
-		if(absolute_scale > 0.1):
-			self.cur_t = self.cur_t + absolute_scale*self.cur_R.dot(t) 
-			self.cur_R = R.dot(self.cur_R)
-		if(self.px_ref.shape[0] < kMinNumFeature):
-			self.px_cur = self.detector.detect(self.new_frame)
-			self.px_cur = np.array([x.pt for x in self.px_cur], dtype=np.float32)
-		frame_with_points = self.new_frame.copy()
-		for point in self.px_cur:
-			x, y = point
-			cv2.circle(frame_with_points, (int(x), int(y)), 3, (0, 255, 0), -1)
-		cv2.imshow("Frame con puntos", frame_with_points)
-		cv2.waitKey(0)
-		cv2.destroyAllWindows()
-		self.px_ref = self.px_cur
 
 
-	def update(self, img, frame_id):
-		assert(img.ndim==2 and img.shape[0]==self.cam.height and img.shape[1]==self.cam.width), "Frame: provided image has not the same size as the camera model or image is not grayscale"
-		self.new_frame = img
-		if(self.frame_stage == STAGE_DEFAULT_FRAME):
-			self.processFrame(frame_id)
-		elif(self.frame_stage == STAGE_SECOND_FRAME):
-			self.processSecondFrame()
-		elif(self.frame_stage == STAGE_FIRST_FRAME):
-			self.processFirstFrame()
-		self.last_frame = self.new_frame
+print("1. KITTI Dataset")
+print("2. College Library Indoors")
+print("3. Indoor Hallway")
+
+selection = 1
+#selection = input("Enter your choice number: ")
+
+cam = PinholeCamera(1241.0, 376.0, 718.8560, 718.8560, 607.1928, 185.2157)
+#cam = PinholeCamera(1280.0, 720.0, 921.170702, 919.018377, 459.904354, 351.238301, -0.033458, 0.105152 , 0.001256, -0.006647, 0.000000)
+
+#camera_matrix = numpy.array([
+# [921.170702, 0.000000, 459.904354],
+# [0.000000, 919.018377, 351.238301],
+# [0.000000, 0.000000, 1.000000]])
+
+# distorsión = numpy.array(
+# [-0.033458,0.105152 , 0.001256, -0.006647, 0.000000])
+
+"""
+if selection == "1":
+	cam = PinholeCamera(1241.0, 376.0, 718.8560, 718.8560, 607.1928, 185.2157) 
+
+elif selection == "2" or selection == "3":
+	cam = PinholeCamera(1080.0, 1920.0, 718.8560, 718.8560, 607.1928, 185.2157) #phone camera
+"""
+vo = VisualOdometry(cam, './mono_vo/ground_truth.txt')
+
+#traj = np.zeros((600,600,3), dtype=np.uint8)
+
+traj = np.zeros((700, 700, 3), dtype=np.uint8)
+traj[:, :, :] = 128  # Establece todos los valores de los canales a 128 (gris medio)
+
+
+grid_size = 10  # Tamaño de la celda de la cuadrícula
+color = (120, 120, 120)  # Color de las líneas de la cuadrícula
+
+# Dibujar las líneas horizontales de la cuadrícula
+for y in range(0, traj.shape[0], grid_size):
+    cv2.line(traj, (0, y), (traj.shape[1], y), color, 1)
+
+# Dibujar las líneas verticales de la cuadrícula
+for x in range(0, traj.shape[1], grid_size):
+    cv2.line(traj, (x, 0), (x, traj.shape[0]), color, 1)
+
+
+range1 = 4541
+range2 = 1363
+range3 = 1115
+
+
+"""
+		if selection == "1":
+			
+
+		elif selection == "2":
+			img = cv2.imread('data/college-library/'+str(img_id).zfill(6)+'.jpg', 0)
+
+		else:
+			img = cv2.imread('/home/yerson/Videos/video_.mp4')
+"""
+
+def init():
+	for img_id in range(range1):
+		img = cv2.imread('/home/yerson/data/kitty/sequences/15/image_0/'+str(img_id).zfill(6)+'.png',0)
+
+		print(img.shape)
+
+		vo.update(img, img_id)
+
+		cur_t = vo.cur_t
+		if(img_id > 2):
+			x, y, z = cur_t[0], cur_t[1], cur_t[2]
+		else:
+			x, y, z = 0., 0., 0.
+		draw_x, draw_y = int(x)+290, int(z)+90
+		true_x, true_y = int(vo.trueX)+290, int(vo.trueZ)+90
+
+		#cv2.circle(traj, (draw_x,draw_y), 1, (img_id*255/4540,255-img_id*255/4540,0), 1)
+		cv2.circle(traj, (draw_x, 400 - draw_y), 1, (img_id*255/4540, 255-img_id*255/4540, 0), 1)
+
+		cv2.rectangle(traj, (10, 20), (600, 60), (0,0,0), -1)
+		text = "Coordinates: x=%2fm y=%2fm z=%2fm"%(x,y,z)
+		cv2.putText(traj, text, (20,40), cv2.FONT_HERSHEY_PLAIN, 1, (255,255,255), 1, 8)
+
+		cv2.imshow('Camera View', img)
+		cv2.imshow('Trajectory', traj)
+		cv2.waitKey(1)
+		if cv2.waitKey(1) & 0xFF == ord('q'):
+			break
+	cv2.imwrite("kitty1.png",traj)
+
+def init2():
+	vid = cv2.VideoCapture('/home/yerson/Videos/video_2.mp4')
+	img_id = 0
+	while(vid.isOpened()):
+		ret, img = vid.read()
+		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		#print(img.shape,"-->")
+
+		#"""
+		vo.update(img, img_id)
+
+		cur_t = vo.cur_t
+		if(img_id > 2):
+			x, y, z = cur_t[0], cur_t[1], cur_t[2]
+		else:
+			x, y, z = 0., 0., 0.
+		draw_x, draw_y = int(x)+290, int(z)+90
+		true_x, true_y = int(vo.trueX)+290, int(vo.trueZ)+90
+
+		#cv2.circle(traj, (draw_x,draw_y), 1, (img_id*255/4540,255-img_id*255/4540,0), 1)
+		cv2.circle(traj, (draw_x, 700 - draw_y), 1, (img_id*255/4540, 255-img_id*255/4540, 0), 1)
+
+		cv2.rectangle(traj, (10, 20), (600, 60), (0,0,0), -1)
+		text = "Coordinates: x=%2fm y=%2fm z=%2fm"%(x,y,z)
+		cv2.putText(traj, text, (20,40), cv2.FONT_HERSHEY_PLAIN, 1, (255,255,255), 1, 8)
+		#"""
+
+		cv2.imshow('Camera View', img)
+		cv2.imshow('Trajectory', traj)
+		cv2.waitKey(1)
+
+		# 720 1280
+		# 376 1241
+		img_id += 1
+
+		if cv2.waitKey(1) & 0xFF == ord('q'):
+			break
+
+	# After the loop release the cap object
+	vid.release()
+	# Destroy all the windows
+	cv2.destroyAllWindows()
+
+
+x, y = 0, 0
+
+def draw_trajectory(event, x_pos, y_pos, flags, param):
+    global x, y
+
+    # Actualizar las coordenadas cuando se presione una tecla
+    if event == cv2.EVENT_LBUTTONDOWN:
+        x, y = x_pos, y_pos
+
+# Crear una ventana llamada "Trajectory"
+cv2.namedWindow('Trajectory')
+
+# Asociar la función de dibujo a la ventana
+cv2.setMouseCallback('Trajectory', draw_trajectory)
+
+while True:
+    # Crear una imagen en blanco para dibujar la trayectoria
+    traj = np.zeros((700, 700, 3), np.uint8)
+
+    # Dibujar un círculo en las coordenadas actuales
+    cv2.circle(traj, (x, y), 10, (0, 255, 0), -1)
+
+    # Mostrar la imagen de la trayectoria
+    cv2.imshow('Trajectory', traj)
+
+    # Esperar por la tecla 'q' para salir del bucle
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Cerrar todas las ventanas
+cv2.destroyAllWindows()
+
+
+init()
+#draw_trajectory()
+#cv2.imwrite('map.png', traj)
